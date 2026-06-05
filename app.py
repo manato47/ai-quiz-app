@@ -3,15 +3,15 @@ import base64
 import io
 from flask import Flask, request, jsonify, send_file, send_from_directory
 from flask_cors import CORS
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 import openpyxl
 from datetime import datetime
 
 app = Flask(__name__, static_folder="static")
 CORS(app)
 
-genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
-model = genai.GenerativeModel("gemini-2.0-flash")
+client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
 
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/gif", "image/webp"}
 
@@ -35,11 +35,14 @@ def solve():
         if image_file.mimetype not in ALLOWED_IMAGE_TYPES:
             return jsonify({"error": "対応していない画像形式です（JPEG / PNG / GIF / WebP）"}), 400
         image_data = image_file.read()
-        parts.append({"mime_type": image_file.mimetype, "data": image_data})
+        parts.append(types.Part.from_bytes(data=image_data, mime_type=image_file.mimetype))
 
     parts.append(question if question else "この画像の問題を解いてください。")
 
-    response = model.generate_content(parts)
+    response = client.models.generate_content(
+        model="gemini-2.0-flash",
+        contents=parts,
+    )
     answer = response.text
     snippet = question[:10] if question else "（画像のみ）"
 
