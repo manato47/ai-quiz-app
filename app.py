@@ -3,14 +3,15 @@ import base64
 import io
 from flask import Flask, request, jsonify, send_file, send_from_directory
 from flask_cors import CORS
-import anthropic
+import google.generativeai as genai
 import openpyxl
 from datetime import datetime
 
 app = Flask(__name__, static_folder="static")
 CORS(app)
 
-client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
+genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
+model = genai.GenerativeModel("gemini-1.5-flash")
 
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/gif", "image/webp"}
 
@@ -22,30 +23,24 @@ def index():
 
 @app.route("/solve", methods=["POST"])
 def solve():
-    """問題を AI に解かせて回答を返す（Excel はまだ触らない）"""
     question = request.form.get("question", "").strip()
     image_file = request.files.get("image")
 
     if not question and not image_file:
         return jsonify({"error": "問題を入力するか、画像を追加してください"}), 400
 
-    content = []
+    parts = []
+
     if image_file:
         if image_file.mimetype not in ALLOWED_IMAGE_TYPES:
             return jsonify({"error": "対応していない画像形式です（JPEG / PNG / GIF / WebP）"}), 400
-        image_data = base64.standard_b64encode(image_file.read()).decode("utf-8")
-        content.append({
-            "type": "image",
-            "source": {"type": "base64", "media_type": image_file.mimetype, "data": image_data},
-        })
-    content.append({"type": "text", "text": question if question else "この画像の問題を解いてください。"})
+        image_data = image_file.read()
+        parts.append({"mime_type": image_file.mimetype, "data": image_data})
 
-    message = client.messages.create(
-        model="claude-opus-4-8",
-        max_tokens=1024,
-        messages=[{"role": "user", "content": content}],
-    )
-    answer = message.content[0].text
+    parts.append(question if question else "この画像の問題を解いてください。")
+
+    response = model.generate_content(parts)
+    answer = response.text
     snippet = question[:10] if question else "（画像のみ）"
 
     return jsonify({"answer": answer, "snippet": snippet})
@@ -53,7 +48,6 @@ def solve():
 
 @app.route("/save", methods=["POST"])
 def save():
-    """回答を既存 Excel に追記して返す"""
     snippet = request.form.get("snippet", "")
     answer = request.form.get("answer", "")
     has_image = request.form.get("has_image", "なし")
