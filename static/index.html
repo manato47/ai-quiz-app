@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI 問題解答サイト</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: "Segoe UI", "Hiragino Sans", sans-serif;
+      background: #f0f4f8;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 24px 12px;
+    }
+    h1 { font-size: 1.5rem; color: #2d3748; margin-bottom: 6px; text-align: center; }
+    p.subtitle { color: #718096; margin-bottom: 24px; font-size: 0.9rem; text-align: center; }
+
+    .card {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+      padding: 20px;
+      width: 100%;
+      max-width: 680px;
+      margin-bottom: 16px;
+    }
+    .card h2 { font-size: 1rem; color: #4a5568; margin-bottom: 12px; }
+
+    textarea {
+      width: 100%;
+      height: 100px;
+      border: 1px solid #cbd5e0;
+      border-radius: 8px;
+      padding: 12px;
+      font-size: 1rem;
+      resize: vertical;
+      outline: none;
+      transition: border-color 0.2s;
+      /* スマホでフォントが小さくならないように */
+      -webkit-text-size-adjust: 100%;
+    }
+    textarea:focus { border-color: #4299e1; }
+
+    .upload-area {
+      border: 2px dashed #cbd5e0;
+      border-radius: 8px;
+      padding: 18px 16px;
+      text-align: center;
+      margin-top: 12px;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      transition: border-color 0.2s, background 0.2s;
+      color: #718096;
+      font-size: 0.9rem;
+      user-select: none;
+    }
+    .upload-area:hover, .upload-area:active, .upload-area.drag-over { border-color: #4299e1; background: #ebf8ff; }
+    .upload-area input { display: none; }
+
+    .preview-wrap { margin-top: 8px; position: relative; display: inline-block; }
+    .preview-wrap img { max-height: 180px; max-width: 100%; border-radius: 8px; border: 1px solid #e2e8f0; }
+    .remove-btn {
+      position: absolute; top: -8px; right: -8px;
+      background: #e53e3e; color: white; border: none;
+      border-radius: 50%; width: 22px; height: 22px;
+      font-size: 12px; cursor: pointer; line-height: 22px; padding: 0;
+    }
+
+    /* Excel アップロードエリア */
+    .excel-area {
+      border: 2px dashed #68d391;
+      border-radius: 8px;
+      padding: 18px 14px;
+      text-align: center;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+      transition: border-color 0.2s, background 0.2s;
+      color: #2f855a;
+      font-size: 0.9rem;
+    }
+    .excel-area:hover, .excel-area:active, .excel-area.drag-over { border-color: #38a169; background: #f0fff4; }
+    .excel-area input { display: none; }
+    .excel-name {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: #f0fff4; border: 1px solid #9ae6b4;
+      border-radius: 6px; padding: 4px 12px;
+      font-size: 0.9rem; color: #276749;
+    }
+    .excel-name .rm { background: none; border: none; color: #e53e3e; cursor: pointer; font-size: 14px; }
+
+    .btn-row { display: flex; gap: 12px; margin-top: 16px; }
+    button {
+      padding: 14px 24px; border: none; border-radius: 8px;
+      font-size: 1rem; cursor: pointer; transition: background 0.2s;
+      /* タッチ操作しやすい最小高さ */
+      min-height: 48px;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #solveBtn { background: #4299e1; color: white; flex: 1; }
+    #solveBtn:hover { background: #3182ce; }
+    #solveBtn:disabled { background: #a0aec0; cursor: not-allowed; }
+
+    .result { margin-top: 24px; display: none; }
+    .answer-box {
+      background: #f7fafc; border: 1px solid #e2e8f0;
+      border-radius: 8px; padding: 16px;
+      white-space: pre-wrap; line-height: 1.7; color: #2d3748;
+      margin-bottom: 14px;
+    }
+    .snippet-tag {
+      display: inline-block; background: #ebf4ff; color: #2b6cb0;
+      border-radius: 4px; padding: 2px 8px; font-size: 0.85rem; margin-bottom: 10px;
+    }
+    #saveBtn { background: #48bb78; color: white; width: 100%; min-height: 48px; }
+    #saveBtn:hover { background: #38a169; }
+    #saveBtn:disabled { background: #a0aec0; cursor: not-allowed; }
+    .save-note { font-size: 0.82rem; color: #718096; margin-top: 6px; }
+
+    .loading { text-align: center; color: #718096; padding: 20px; }
+    .spinner {
+      width: 28px; height: 28px; border: 3px solid #e2e8f0;
+      border-top-color: #4299e1; border-radius: 50%;
+      animation: spin 0.8s linear infinite; margin: 0 auto 8px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .error { color: #e53e3e; margin-top: 12px; font-size: 0.9rem; }
+    .success { color: #38a169; margin-top: 8px; font-size: 0.9rem; }
+
+    @media (max-width: 480px) {
+      body { padding: 16px 8px; }
+      h1 { font-size: 1.3rem; }
+      .card { padding: 16px; border-radius: 10px; }
+      .remove-btn { width: 28px; height: 28px; font-size: 14px; line-height: 28px; }
+    }
+  </style>
+</head>
+<body>
+  <h1>AI 問題解答サイト</h1>
+  <p class="subtitle">問題を送ると AI が解答し、既存の Excel ファイルに追記して返します</p>
+
+  <!-- 問題入力カード -->
+  <div class="card">
+    <h2>問題を入力</h2>
+    <textarea id="question" placeholder="問題を入力してください（画像だけでも OK）..."></textarea>
+
+    <div class="upload-area" id="imgUploadArea" onclick="document.getElementById('imageInput').click()"
+         ondragover="dragOver(event,'imgUploadArea')" ondragleave="dragLeave('imgUploadArea')" ondrop="dropFile(event,'image')">
+      <input type="file" id="imageInput" accept="image/jpeg,image/png,image/gif,image/webp" onchange="setImage(event)">
+      <span id="imgLabel">📷 問題画像を追加（タップまたはドラッグ）</span>
+      <div id="previewWrap" class="preview-wrap" style="display:none">
+        <img id="previewImg" src="" alt="プレビュー">
+        <button class="remove-btn" onclick="removeImage(event)">✕</button>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button id="solveBtn" onclick="solve()">解答する（Ctrl+Enter）</button>
+    </div>
+    <div id="error" class="error"></div>
+
+    <div id="loading" class="loading" style="display:none">
+      <div class="spinner"></div>AI が考えています...
+    </div>
+
+    <!-- 回答表示 + Excel 保存 -->
+    <div id="result" class="result">
+      <div id="snippetTag" class="snippet-tag"></div>
+      <h2>AI の回答</h2>
+      <div id="answerBox" class="answer-box"></div>
+
+      <!-- Excel ファイル選択 -->
+      <div class="excel-area" id="xlsUploadArea" onclick="document.getElementById('excelInput').click()"
+           ondragover="dragOver(event,'xlsUploadArea')" ondragleave="dragLeave('xlsUploadArea')" ondrop="dropFile(event,'excel')">
+        <input type="file" id="excelInput" accept=".xlsx" onchange="setExcel(event)">
+        <span id="xlsLabel">📂 既存の Excel ファイルを選択（なければ新規作成）</span>
+        <div id="xlsName" style="display:none">
+          <span class="excel-name">
+            <span id="xlsNameText"></span>
+            <button class="rm" onclick="removeExcel(event)">✕</button>
+          </span>
+        </div>
+      </div>
+
+      <button id="saveBtn" onclick="saveToExcel()" style="margin-top:12px">Excel に追記してダウンロード</button>
+      <div id="saveSuccess" class="success" style="display:none">✅ 保存しました！ファイルをダウンロードしてください。</div>
+    </div>
+  </div>
+
+  <script>
+    let imageFile = null;
+    let excelFile = null;
+    let lastAnswer = "";
+    let lastSnippet = "";
+    let lastHasImage = "なし";
+
+    // ---- 画像 ----
+    function setImage(e) { applyImage(e.target.files[0]); }
+    function applyImage(file) {
+      if (!file) return;
+      imageFile = file;
+      const reader = new FileReader();
+      reader.onload = e => {
+        document.getElementById("previewImg").src = e.target.result;
+        document.getElementById("previewWrap").style.display = "inline-block";
+        document.getElementById("imgLabel").style.display = "none";
+      };
+      reader.readAsDataURL(file);
+    }
+    function removeImage(e) {
+      e.stopPropagation();
+      imageFile = null;
+      document.getElementById("imageInput").value = "";
+      document.getElementById("previewWrap").style.display = "none";
+      document.getElementById("imgLabel").style.display = "";
+    }
+
+    // ---- Excel ----
+    function setExcel(e) { applyExcel(e.target.files[0]); }
+    function applyExcel(file) {
+      if (!file) return;
+      excelFile = file;
+      document.getElementById("xlsNameText").textContent = file.name;
+      document.getElementById("xlsName").style.display = "block";
+      document.getElementById("xlsLabel").style.display = "none";
+    }
+    function removeExcel(e) {
+      e.stopPropagation();
+      excelFile = null;
+      document.getElementById("excelInput").value = "";
+      document.getElementById("xlsName").style.display = "none";
+      document.getElementById("xlsLabel").style.display = "";
+    }
+
+    // ---- ドラッグ&ドロップ共通 ----
+    function dragOver(e, id) { e.preventDefault(); document.getElementById(id).classList.add("drag-over"); }
+    function dragLeave(id) { document.getElementById(id).classList.remove("drag-over"); }
+    function dropFile(e, type) {
+      e.preventDefault();
+      const areaId = type === "image" ? "imgUploadArea" : "xlsUploadArea";
+      document.getElementById(areaId).classList.remove("drag-over");
+      const file = e.dataTransfer.files[0];
+      if (!file) return;
+      if (type === "image") applyImage(file);
+      else applyExcel(file);
+    }
+
+    // ---- 解答 ----
+    async function solve() {
+      const question = document.getElementById("question").value.trim();
+      if (!question && !imageFile) { showError("問題を入力するか、画像を追加してください"); return; }
+      clearError();
+      document.getElementById("result").style.display = "none";
+      document.getElementById("saveSuccess").style.display = "none";
+      document.getElementById("solveBtn").disabled = true;
+      document.getElementById("loading").style.display = "block";
+
+      try {
+        const form = new FormData();
+        form.append("question", question);
+        if (imageFile) form.append("image", imageFile);
+
+        const res = await fetch("/solve", { method: "POST", body: form });
+        const data = await res.json();
+        if (!res.ok) { showError(data.error || "エラーが発生しました"); return; }
+
+        lastAnswer = data.answer;
+        lastSnippet = data.snippet;
+        lastHasImage = imageFile ? "あり" : "なし";
+
+        document.getElementById("snippetTag").textContent = `記録キー: "${data.snippet}"`;
+        document.getElementById("answerBox").textContent = data.answer;
+        document.getElementById("result").style.display = "block";
+      } catch { showError("通信エラーが発生しました"); }
+      finally {
+        document.getElementById("loading").style.display = "none";
+        document.getElementById("solveBtn").disabled = false;
+      }
+    }
+
+    // ---- Excel 保存 ----
+    async function saveToExcel() {
+      document.getElementById("saveBtn").disabled = true;
+      document.getElementById("saveSuccess").style.display = "none";
+
+      const form = new FormData();
+      form.append("snippet", lastSnippet);
+      form.append("answer", lastAnswer);
+      form.append("has_image", lastHasImage);
+      if (excelFile) form.append("excel", excelFile);
+
+      try {
+        const res = await fetch("/save", { method: "POST", body: form });
+        if (!res.ok) { showError("保存に失敗しました"); return; }
+
+        // ダウンロードを自動トリガー
+        const blob = await res.blob();
+        const cd = res.headers.get("Content-Disposition") || "";
+        const match = cd.match(/filename="?([^";\n]+)"?/);
+        const filename = match ? match[1] : "results.xlsx";
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url; a.download = filename; a.click();
+        URL.revokeObjectURL(url);
+
+        document.getElementById("saveSuccess").style.display = "block";
+      } catch { showError("保存に失敗しました"); }
+      finally { document.getElementById("saveBtn").disabled = false; }
+    }
+
+    function showError(msg) { document.getElementById("error").textContent = msg; }
+    function clearError() { document.getElementById("error").textContent = ""; }
+
+    document.getElementById("question").addEventListener("keydown", e => {
+      if (e.key === "Enter" && e.ctrlKey) solve();
+    });
+  </script>
+</body>
+</html>
